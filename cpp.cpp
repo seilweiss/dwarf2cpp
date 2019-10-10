@@ -98,6 +98,11 @@ std::string Type::toString()
 	std::vector<std::string> prefix;
 	std::vector<std::string> postfix;
 
+	bool isFuncPointer = (isFundamentalType) ? false :
+		(userType->type == UserType::FUNCTION);
+
+	bool firstPointerFound = false;
+
 	for (Modifier mod : modifiers)
 	{
 		std::string modstr = ModifierToString(mod);
@@ -111,7 +116,17 @@ std::string Type::toString()
 		}
 		else
 		{
-			ptrref.push_back(modstr);
+			// Kind of a hack to make function pointers print correctly.
+			// In the real world, a function pointer is typically defined as a pointer
+			// in the typedef itself, and not in a variable/member type...
+			// So this ignores the first pointer from the modifiers.
+			// See FunctionType::toNameString()... it prints the function type as a pointer
+			// even though it really isn't.
+
+			if (!firstPointerFound)
+				firstPointerFound = true;
+			else
+				ptrref.push_back(modstr);
 		}
 	}
 
@@ -336,6 +351,9 @@ std::string ArrayType::toNameString(std::string name)
 std::string FunctionType::toNameString(std::string name)
 {
 	std::stringstream ss;
+
+	// This isn't really a function pointer, but we'll print it as if it is
+	// DWARF is weird
 	ss << returnType.toString() << "(*" << name << ")" << toParametersString();
 	return ss.str();
 }
