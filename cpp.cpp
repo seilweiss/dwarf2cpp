@@ -123,7 +123,7 @@ std::string Type::toString()
 			// See FunctionType::toNameString()... it prints the function type as a pointer
 			// even though it really isn't.
 
-			if (!firstPointerFound)
+			if (isFuncPointer && !firstPointerFound)
 				firstPointerFound = true;
 			else
 				ptrref.push_back(modstr);
