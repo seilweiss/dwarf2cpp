@@ -7,7 +7,7 @@
 #include <fstream>
 #include <vector>
 #include <map>
-#include <filesystem>
+#include <experimental/filesystem>
 
 namespace filesystem = std::experimental::filesystem;
 
@@ -77,7 +77,9 @@ int main(int argc, char **argv)
 	{
 		filesystem::path filename(cpp->filename);
 		filesystem::path path(outDirectory);
-		path.append(filename.relative_path());
+
+		path /= filename.relative_path();
+		path = path.make_preferred();
 
 		filesystem::create_directories(path.parent_path());
 
