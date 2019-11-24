@@ -75,6 +75,12 @@ int main(int argc, char **argv)
 
 	for (Cpp::File *cpp : cppFiles)
 	{
+		size_t pos;
+		while ((pos = cpp->filename.find("\\")) != std::string::npos)
+		{
+			cpp->filename.replace(pos, 1, "/");
+		}
+
 		filesystem::path filename(cpp->filename);
 		filesystem::path path(outDirectory);
 
