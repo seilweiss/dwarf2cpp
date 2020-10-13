@@ -222,6 +222,7 @@ bool processCompileUnit(Dwarf::Entry *entry, Cpp::File *cpp)
 		case DW_TAG_enumeration_type:
 		case DW_TAG_array_type:
 		case DW_TAG_subroutine_type:
+		case DW_TAG_union_type:
 		{
 			entryUTPairs[entry] = new Cpp::UserType;
 		}
@@ -252,6 +253,7 @@ bool processCompileUnit(Dwarf::Entry *entry, Cpp::File *cpp)
 		case DW_TAG_enumeration_type:
 		case DW_TAG_array_type:
 		case DW_TAG_subroutine_type:
+		case DW_TAG_union_type:
 		{
 			Cpp::UserType *userType = entryUTPairs[entry];
 			processUserType(entry, userType);
@@ -432,6 +434,7 @@ bool processUserType(Dwarf::Entry *entry, Cpp::UserType *userType)
 	{
 	case DW_TAG_class_type:
 	case DW_TAG_structure_type:
+	case DW_TAG_union_type:
 		userType->type = Cpp::UserType::CLASS;
 		userType->classData = new Cpp::ClassType;
 
