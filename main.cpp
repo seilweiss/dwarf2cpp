@@ -7,6 +7,7 @@
 #include <fstream>
 #include <vector>
 #include <map>
+#define _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING
 #include <experimental/filesystem>
 
 namespace filesystem = std::experimental::filesystem;
