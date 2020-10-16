@@ -82,6 +82,26 @@ int main(int argc, char **argv)
 			cpp->filename.replace(pos, 1, "/");
 		}
 
+		/*std::cout << "File has " << cpp->functions.size() << " functions." << std::endl;
+		for (Cpp::Function &func : cpp->functions) {
+			if (func.parameters.size() > 0)
+				std::cout << "Trying func: " << func.name << ", " << func.parameters[0].name.c_str() << std::endl;
+			if (func.parameters.size() > 0 && func.parameters[0].name.compare("this") == 0) {
+				std::cout << "Passed 1" << std::endl;
+				func.typeOwner = func.parameters[0].type.userType;
+				std::cout << "Passed 2" << std::endl;
+				func.typeOwner->classData->functions.push_back(func);
+				std::cout << "Passed 3" << std::endl;
+				func.parameters.erase(func.parameters.begin());
+				std::cout << "Passed 4" << std::endl;
+			}
+			else {
+				func.typeOwner = nullptr;
+			}
+			std::cout << "Loop Next" << std::endl;
+		}
+		std::cout << "Done" << std::endl;*/
+
 		filesystem::path filename(cpp->filename);
 		filesystem::path path(outDirectory);
 
@@ -436,8 +456,9 @@ bool processUserType(Dwarf::Entry *entry, Cpp::UserType *userType)
 	case DW_TAG_class_type:
 	case DW_TAG_structure_type:
 	case DW_TAG_union_type:
-		userType->type = Cpp::UserType::CLASS;
+		userType->type = (entry->tag == DW_TAG_structure_type) ? Cpp::UserType::STRUCT : ((entry->tag == DW_TAG_union_type) ? Cpp::UserType::UNION : Cpp::UserType::CLASS);
 		userType->classData = new Cpp::ClassType;
+		userType->classData->parent = userType;
 
 		if (!processClassType(entry, userType->classData))
 			return false;
@@ -740,6 +761,66 @@ bool processFunction(Dwarf::Entry *entry, Cpp::Function *f)
 		}
 
 		entry = entry->getSibling();
+	}
+
+	f->typeOwner = nullptr;
+	if (f->parameters.size() > 0 && f->parameters[0].name.compare("this") == 0) {
+		f->typeOwner = f->parameters[0].type.userType;
+		f->parameters.erase(f->parameters.begin());
+		f->typeOwner->classData->functions.push_back(*f);
+	}
+	else if (f->mangledName.size() > 2) {
+		int foundAt = f->mangledName.find_last_of("__");
+		if (foundAt != -1) {
+			char temp;
+			std::stringstream length;
+			int i;
+			for (i = foundAt + 1; i < f->mangledName.size(); i++) {
+				temp = f->mangledName[i];
+				if (temp >= '0' && temp <= '9') {
+					length << temp;
+				}
+				else {
+					break;
+				}
+			}
+
+			std::string lengthStr = length.str();
+			if (lengthStr.length() > 0) {
+				int lengthCount = std::stoi(lengthStr);
+				if (f->mangledName[i + lengthCount] == 'F') {
+					std::string className = f->mangledName.substr(i, lengthCount);
+
+					// I tried to access this from the named map, but I couldn't for the life of me figure out how to do it. C++ is terrible, in no other languages is stuff this annoying. I get it, it's because C++ is native code working with direct memory. But somehow C# compiles into native code and doesn't have these issues.
+					/*auto it = nameUTListPairs.find(className);
+					if (it != nameUTListPairs.end()) {
+						std::vector<Cpp::UserType*> vector = it->second;
+						if (vector.size() != 1)
+							std::cout << "Couldn't find good type for '" << className << "'. (" << vector.size() << ")" << std::endl;
+					}
+					else {
+						std::cout << "Couldn't find good type for '" << className << "'." << std::endl;
+					}*/
+						
+					
+					Cpp::UserType* type = nullptr;
+					for (std::map<Dwarf::Entry*, Cpp::UserType*>::iterator iter = entryUTPairs.begin(); iter != entryUTPairs.end(); ++iter)
+					{
+						Dwarf::Entry* k = iter->first;
+						Cpp::UserType* value = iter->second;
+						if (value->name.compare(className) == 0) {
+							type = value;
+							break;
+						}
+					}
+
+					if (type != nullptr) {
+						f->typeOwner = type;
+						f->typeOwner->classData->functions.push_back(*f);
+					}
+				}
+			}
+		}
 	}
 
 	return true;

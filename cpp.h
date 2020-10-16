@@ -85,7 +85,7 @@ struct Variable
 
 struct UserType
 {
-	enum { CLASS, ENUM, ARRAY, FUNCTION } type;
+	enum { CLASS, UNION, STRUCT, ENUM, ARRAY, FUNCTION } type;
 	std::string name;
 	int index;
 
@@ -119,9 +119,11 @@ struct ClassType
 		Type type;
 	};
 
+	UserType* parent;
 	int size;
 	std::vector<Member> members;
 	std::vector<Inheritance> inheritances;
+	std::vector<Function> functions;
 
 	std::string toNameString(std::string name, bool includeSize, bool includeInheritances);
 	std::string toBodyString(bool includeOffsets);
@@ -181,8 +183,10 @@ struct Function : FunctionType
 	std::string mangledName;
 	unsigned int startAddress;
 	std::vector<Variable> variables;
+	UserType* typeOwner;
 
 	std::string toNameString();
+	std::string toNameString(bool skipNamespace);
 	std::string toDeclarationString();
 	std::string toDefinitionString();
 };

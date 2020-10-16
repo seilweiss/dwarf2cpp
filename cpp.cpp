@@ -17,6 +17,8 @@ std::string File::toString(bool justUserTypes, bool includeComments)
 	for (UserType *ut : userTypes)
 	{
 		if (ut->type == UserType::CLASS ||
+			ut->type == UserType::UNION ||
+			ut->type == UserType::STRUCT || 
 			ut->type == UserType::ENUM)
 			ss << ut->toDeclarationString() << "\n";
 	}
@@ -45,6 +47,8 @@ std::string File::toString(bool justUserTypes, bool includeComments)
 	for (UserType *ut : userTypes)
 	{
 		if (ut->type == UserType::CLASS ||
+			ut->type == UserType::UNION ||
+			ut->type == UserType::STRUCT ||
 			ut->type == UserType::ENUM)
 		{
 			ss << ut->toDefinitionString(includeComments) << "\n\n";
@@ -172,6 +176,8 @@ std::string UserType::toDefinitionString(bool includeComments)
 
 	switch (type)
 	{
+	case UNION:
+	case STRUCT:
 	case CLASS:
 		ss << classData->toBodyString(includeComments);
 		break;
@@ -189,6 +195,8 @@ std::string UserType::toNameString(bool includeSize, bool includeInheritances)
 {
 	switch (type)
 	{
+	case UNION:
+	case STRUCT:
 	case CLASS:
 		return classData->toNameString(name, includeSize, includeInheritances);
 	case ENUM:
@@ -205,7 +213,7 @@ std::string UserType::toNameString(bool includeSize, bool includeInheritances)
 std::string ClassType::toNameString(std::string name, bool includeSize, bool includeInheritances)
 {
 	std::stringstream ss;
-	ss << (isUnion() ? "union " : "struct ") << name;
+	ss << std::string((parent->type == UserType::STRUCT) ? "struct " : ((parent->type == UserType::UNION) ? "union " : "class ")) << name;
 
 	if (includeInheritances)
 	{
@@ -231,7 +239,7 @@ std::string ClassType::toBodyString(bool includeOffsets)
 	std::stringstream ss;
 	ss << "{\n";
 
-	bool includeUnions = !isUnion();
+	bool includeUnions = (parent->type != UserType::UNION);
 	int unionOffset = -1;
 
 	size_t size = members.size();
@@ -263,23 +271,16 @@ std::string ClassType::toBodyString(bool includeOffsets)
 		}
 	}
 
+	if (functions.size() > 0) {
+		ss << "\n";
+		for (Function& fun : functions) {
+			ss << "\t" << fun.toDeclarationString() << ";\n";
+		}
+	}
+
 	ss << "}";
 
 	return ss.str();
-}
-
-bool ClassType::isUnion()
-{
-	if (members.size() <= 1)
-		return false;
-
-	for (size_t i = 0; i < members.size() - 1; i++)
-	{
-		if (members[i].offset != members[i+1].offset)
-			return false;
-	}
-
-	return true;
 }
 
 std::string ClassType::Member::toString(bool includeOffset)
@@ -389,17 +390,25 @@ std::string FunctionType::Parameter::toString()
 	return ss.str();
 }
 
-std::string Function::toNameString()
+std::string Function::toNameString(bool skipNamespace)
 {
 	std::stringstream ss;
-	ss << returnType.toString() << " " << name << toParametersString();
+	ss << returnType.toString() << " ";
+	if (typeOwner != nullptr && !skipNamespace)
+		ss << typeOwner->name << "::";
+	ss << name << toParametersString();
 	return ss.str();
+}
+
+std::string Function::toNameString()
+{
+	return toNameString(false);
 }
 
 std::string Function::toDeclarationString()
 {
 	std::stringstream ss;
-	ss << toNameString() << ";";
+	ss << toNameString(true) << ";";
 	return ss.str();
 }
 
