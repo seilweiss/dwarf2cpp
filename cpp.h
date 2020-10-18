@@ -70,6 +70,7 @@ struct Type
 		UserType *userType;
 	};
 
+	int size();
 	std::string toString();
 	static std::string ModifierToString(Modifier m);
 };
@@ -109,6 +110,8 @@ struct ClassType
 		int offset;
 		std::string name;
 		Type type;
+		int bit_offset;
+		int bit_size;
 
 		std::string toString(bool includeOffset);
 	};
@@ -135,11 +138,12 @@ struct EnumType
 	struct Element
 	{
 		std::string name;
-		int constValue;
+		long long constValue;
 
 		std::string toString(int lastValue);
 	};
 
+	FundamentalType baseType;
 	std::vector<Element> elements;
 
 	std::string toNameString(std::string name);
@@ -192,6 +196,7 @@ struct Function : FunctionType
 };
 
 std::string FundamentalTypeToString(FundamentalType ft);
+int GetFundamentalTypeSize(FundamentalType ft);
 std::string CommentToString(std::string comment);
 std::string StarCommentToString(std::string comment, bool multiline);
 std::string IndentToString(int level);

@@ -255,7 +255,15 @@ std::string ClassType::toBodyString(bool includeOffsets)
 			i < size - 1 && members[i + 1].offset == offset)
 		{
 			unionOffset = offset;
-			ss << "union\n\t{\n\t";
+
+			if (m.bit_size == -1) {
+				ss << "union";
+			}
+			else {
+				ss << "struct";
+			}
+
+			ss << "\n\t{\n\t";
 		}
 
 		if (includeUnions && unionOffset != -1)
@@ -291,6 +299,8 @@ std::string ClassType::Member::toString(bool includeOffset)
 		ss << StarCommentToString(toHexString(offset), false) << " ";
 
 	ss << type.toString() << " " << name;
+	if (bit_size != -1)
+		ss << " : " << bit_size;
 
 	return ss.str();
 }
@@ -299,12 +309,15 @@ std::string EnumType::toNameString(std::string name)
 {
 	std::stringstream ss;
 	ss << "enum " << name;
+	if (baseType != Cpp::FundamentalType::INT)
+		ss << " : " << FundamentalTypeToString(baseType);
 	return ss.str();
 }
 
 std::string EnumType::toBodyString()
 {
 	std::stringstream ss;
+
 	ss << "{\n";
 
 	int lastValue = -1;
@@ -471,6 +484,79 @@ std::string FundamentalTypeToString(FundamentalType ft)
 	std::stringstream ss;
 	ss << "<unknown type (" << toHexString(ft) << ")>";
 	return ss.str();
+}
+
+int GetFundamentalTypeSize(FundamentalType ft)
+{
+	switch (ft)
+	{
+	case FundamentalType::CHAR:
+	case FundamentalType::SIGNED_CHAR:
+	case FundamentalType::UNSIGNED_CHAR:
+		return 1;
+	case FundamentalType::SHORT:
+	case FundamentalType::SIGNED_SHORT:
+	case FundamentalType::UNSIGNED_SHORT:
+		return 2;
+	case FundamentalType::INT:
+	case FundamentalType::SIGNED_INT:
+	case FundamentalType::UNSIGNED_INT:
+		return 4;
+	case FundamentalType::LONG:
+	case FundamentalType::SIGNED_LONG:
+	case FundamentalType::UNSIGNED_LONG:
+		return 8; // Confirmed 8 bytes.
+	case FundamentalType::FLOAT:
+		return 4;
+	case FundamentalType::DOUBLE:
+		return 8;
+	case FundamentalType::LONG_DOUBLE:
+		return 8; // TODO: UNSURE
+	case FundamentalType::VOID:
+		return 4; // TODO: UNSURE
+	case FundamentalType::BOOL:
+		return 1; // TODO: UNSURE
+	case FundamentalType::LONG_LONG:
+	case FundamentalType::SIGNED_LONG_LONG:
+	case FundamentalType::UNSIGNED_LONG_LONG:
+		return 8; // TODO: UNSURE
+	}
+
+	return -1;
+}
+
+int Type::size() {
+	if (modifiers.size() > 0)
+		for (Cpp::Type::Modifier modifier : modifiers)
+			if (modifier == Cpp::Type::Modifier::POINTER_TO || modifier == Cpp::Type::Modifier::REFERENCE_TO)
+				return 4;
+
+	if (isFundamentalType) {
+		return GetFundamentalTypeSize(fundamentalType);
+	}
+	else {
+		switch (userType->type) {
+		case Cpp::UserType::STRUCT:
+		case Cpp::UserType::CLASS:
+		case Cpp::UserType::UNION:
+			return userType->classData->size;
+			break;
+		case Cpp::UserType::ARRAY:
+			int amount;
+			amount = 1;
+			if (userType->arrayData->dimensions.size() > 0)
+				for (auto dimension : userType->arrayData->dimensions)
+					amount *= dimension.size;
+			return amount * userType->arrayData->type.size();
+			break;
+		case Cpp::UserType::FUNCTION:
+			return 4;
+			break;
+		case Cpp::UserType::ENUM:
+			return GetFundamentalTypeSize(userType->enumData->baseType);
+			break;
+		}
+	}
 }
 
 std::string Type::ModifierToString(Modifier m)

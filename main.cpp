@@ -32,7 +32,7 @@ bool processClassType(Dwarf::Entry *entry, Cpp::ClassType *c);
 bool processMember(Dwarf::Entry *entry, Cpp::ClassType::Member *m);
 bool processInheritance(Dwarf::Entry *entry, Cpp::ClassType::Inheritance *i_);
 bool processEnumType(Dwarf::Entry *entry, Cpp::EnumType *e);
-bool processElementList(Dwarf::Attribute *attr, Cpp::EnumType *e);
+bool processElementList(Dwarf::Attribute *attr, Cpp::EnumType *e, int byte_size);
 bool processFunctionType(Dwarf::Entry *entry, Cpp::FunctionType *f);
 bool processParameter(Dwarf::Entry *entry, Cpp::FunctionType::Parameter *p);
 bool processFunction(Dwarf::Entry *entry, Cpp::Function *f);
@@ -81,26 +81,6 @@ int main(int argc, char **argv)
 		{
 			cpp->filename.replace(pos, 1, "/");
 		}
-
-		/*std::cout << "File has " << cpp->functions.size() << " functions." << std::endl;
-		for (Cpp::Function &func : cpp->functions) {
-			if (func.parameters.size() > 0)
-				std::cout << "Trying func: " << func.name << ", " << func.parameters[0].name.c_str() << std::endl;
-			if (func.parameters.size() > 0 && func.parameters[0].name.compare("this") == 0) {
-				std::cout << "Passed 1" << std::endl;
-				func.typeOwner = func.parameters[0].type.userType;
-				std::cout << "Passed 2" << std::endl;
-				func.typeOwner->classData->functions.push_back(func);
-				std::cout << "Passed 3" << std::endl;
-				func.parameters.erase(func.parameters.begin());
-				std::cout << "Passed 4" << std::endl;
-			}
-			else {
-				func.typeOwner = nullptr;
-			}
-			std::cout << "Loop Next" << std::endl;
-		}
-		std::cout << "Done" << std::endl;*/
 
 		filesystem::path filename(cpp->filename);
 		filesystem::path path(outDirectory);
@@ -558,6 +538,8 @@ bool processClassType(Dwarf::Entry *entry, Cpp::ClassType *c)
 
 bool processMember(Dwarf::Entry *entry, Cpp::ClassType::Member *m)
 {
+	m->bit_offset = -1;
+	m->bit_size = -1;
 	for (int i = 0; i < entry->numAttributes; i++)
 	{
 		Dwarf::Attribute *attr = &entry->attributes[i];
@@ -566,6 +548,12 @@ bool processMember(Dwarf::Entry *entry, Cpp::ClassType::Member *m)
 		{
 		case DW_AT_name:
 			m->name = attr->getString();
+			break;
+		case DW_AT_bit_offset:
+			m->bit_offset = attr->getHword();
+			break;
+		case DW_AT_bit_size:
+			m->bit_size = attr->getWord();
 			break;
 		case DW_AT_fund_type:
 		case DW_AT_user_def_type:
@@ -606,14 +594,37 @@ bool processInheritance(Dwarf::Entry *entry, Cpp::ClassType::Inheritance *i_)
 
 bool processEnumType(Dwarf::Entry *entry, Cpp::EnumType *e)
 {
+	int byte_size = 0;
 	for (int i = 0; i < entry->numAttributes; i++)
 	{
 		Dwarf::Attribute *attr = &entry->attributes[i];
 
 		switch (attr->name)
 		{
+		case DW_AT_byte_size:
+			byte_size = attr->getWord();
+
+			switch (byte_size) {
+			case 1:
+				e->baseType = Cpp::FundamentalType::UNSIGNED_CHAR;
+				break;
+			case 2:
+				e->baseType = Cpp::FundamentalType::UNSIGNED_SHORT;
+				break;
+			case 4:
+				e->baseType = Cpp::FundamentalType::INT;
+				break;
+			case 8:
+				e->baseType = Cpp::FundamentalType::LONG;
+				break;
+			default:
+				std::cout << "Unknown enum size! [" << byte_size << "]" << std::endl;
+				return false;
+				break;
+			}
+			break;
 		case DW_AT_element_list:
-			if (!processElementList(attr, e))
+			if (!processElementList(attr, e, byte_size))
 				return false;
 			break;
 		}
@@ -622,7 +633,7 @@ bool processEnumType(Dwarf::Entry *entry, Cpp::EnumType *e)
 	return true;
 }
 
-bool processElementList(Dwarf::Attribute *attr, Cpp::EnumType *e)
+bool processElementList(Dwarf::Attribute *attr, Cpp::EnumType *e, int byte_size)
 {
 	Dwarf *dwarf = attr->entry->dwarf;
 
@@ -633,8 +644,20 @@ bool processElementList(Dwarf::Attribute *attr, Cpp::EnumType *e)
 	{
 		Cpp::EnumType::Element element;
 
-		element.constValue = dwarf->read<int>(block);
-		block += sizeof(int);
+		if (byte_size == 1) {
+			element.constValue = dwarf->read<unsigned char>(block);
+		}
+		else if (byte_size == 2) {
+			element.constValue = dwarf->read<unsigned short>(block);
+		}
+		else if (byte_size == 4) {
+			element.constValue = dwarf->read<int>(block);
+		}
+		else if (byte_size == 8) {
+			element.constValue = dwarf->read<long long>(block);
+		}
+		
+		block += byte_size;
 
 		element.name = block;
 		block += element.name.size() + 1;
