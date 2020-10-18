@@ -654,7 +654,7 @@ bool processElementList(Dwarf::Attribute *attr, Cpp::EnumType *e, int byte_size)
 			element.constValue = dwarf->read<int>(block);
 		}
 		else if (byte_size == 8) {
-			element.constValue = dwarf->read<long long>(block);
+			element.constValue = dwarf->read<long>(block);
 		}
 		
 		block += byte_size;

@@ -138,7 +138,7 @@ struct EnumType
 	struct Element
 	{
 		std::string name;
-		long long constValue;
+		long constValue;
 
 		std::string toString(int lastValue);
 	};
