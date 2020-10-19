@@ -72,6 +72,7 @@ struct Type
 	};
 
 	int size();
+	std::string toString(std::string varName);
 	std::string toString();
 	static std::string ModifierToString(Modifier m);
 };

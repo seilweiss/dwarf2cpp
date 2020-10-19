@@ -92,73 +92,45 @@ std::string File::toString(bool justUserTypes, bool includeComments)
 	return ss.str();
 }
 
-std::string Type::toString()
-{
-	std::string name = (isFundamentalType ?
-		FundamentalTypeToString(fundamentalType) :
-		userType->name);
+std::string Type::toString(std::string varName) {
+	std::stringstream result;
 
-	std::vector<std::string> ptrref;
-	std::vector<std::string> prefix;
-	std::vector<std::string> postfix;
-
-	bool isFuncPointer = (isFundamentalType) ? false :
-		(userType->type == UserType::FUNCTION);
-
-	bool firstPointerFound = false;
-
+	// Add prefix modifiers.
 	for (Modifier mod : modifiers)
-	{
-		std::string modstr = ModifierToString(mod);
+		if (mod == Modifier::CONST || mod == Modifier::VOLATILE)
+			result << ModifierToString(mod) << " ";
 
-		if (mod == CONST && mod == VOLATILE)
-		{
-			if (prefix.size() == 0)
-				prefix.push_back(modstr);
-			else
-				postfix.push_back(modstr);
-		}
-		else
-		{
-			// Kind of a hack to make function pointers print correctly.
-			// In the real world, a function pointer is typically defined as a pointer
-			// in the typedef itself, and not in a variable/member type...
-			// So this ignores the first pointer from the modifiers.
-			// See FunctionType::toNameString()... it prints the function type as a pointer
-			// even though it really isn't.
-
-			if (isFuncPointer && !firstPointerFound)
-				firstPointerFound = true;
-			else
-				ptrref.push_back(modstr);
-		}
+	if (isFundamentalType) {
+		result << FundamentalTypeToString(fundamentalType);
+	} else if (userType->type == UserType::ARRAY) {
+		return userType->arrayData->toNameString(varName);
+	}
+	else if (userType->type == UserType::FUNCTION) {
+		return userType->functionData->toNameString(varName);
+	}
+	else {
+		result << userType->name;
 	}
 
-	std::stringstream ss;
+	for (Modifier mod : modifiers)
+		if (mod == Modifier::POINTER_TO || mod == Modifier::REFERENCE_TO)
+			result << ModifierToString(mod);
 
-	for (std::string s : prefix)
-		ss << s << " ";
+	if (!varName.empty())
+		result << " " << varName;
 
-	ss << name;
+	return result.str();
+}
 
-	for (std::string s : ptrref)
-		ss << s;
-
-	ss << " ";
-
-	for (std::string s : postfix)
-		ss << s << " ";
-
-	std::string str = ss.str();
-	str.pop_back();
-
-	return str;
+std::string Type::toString()
+{
+	return toString("");
 }
 
 std::string Variable::toString()
 {
 	std::stringstream ss;
-	ss << type.toString() << " " << name;
+	ss << type.toString(name);
 	return ss.str();
 }
 
@@ -298,7 +270,7 @@ std::string ClassType::Member::toString(bool includeOffset)
 	if (includeOffset)
 		ss << StarCommentToString(toHexString(offset), false) << " ";
 
-	ss << type.toString() << " " << name;
+	ss << type.toString(name);
 	if (bit_size != -1)
 		ss << " : " << bit_size;
 
@@ -354,7 +326,7 @@ std::string EnumType::Element::toString(int lastValue)
 std::string ArrayType::toNameString(std::string name)
 {
 	std::stringstream ss;
-	ss << type.toString() << " " << name;
+	ss << type.toString(name);
 
 	for (Dimension &d : dimensions)
 		ss << "[" << std::to_string(d.size) << "]";
@@ -394,13 +366,7 @@ std::string FunctionType::toParametersString()
 
 std::string FunctionType::Parameter::toString()
 {
-	std::stringstream ss;
-	ss << type.toString();
-
-	if (!name.empty())
-		ss << " " << name;
-
-	return ss.str();
+	return type.toString(name);
 }
 
 std::string Function::toNameString(bool skipNamespace)
@@ -504,7 +470,7 @@ std::string FundamentalTypeToString(FundamentalType ft)
 	}
 
 	std::stringstream ss;
-	ss << "<unknown type (" << toHexString(ft) << ")>";
+	ss << "<unknown fundamental type (" << toHexString(ft) << ")>";
 	return ss.str();
 }
 

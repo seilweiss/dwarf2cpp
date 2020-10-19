@@ -815,7 +815,7 @@ bool processFunction(Dwarf::Entry *entry, Cpp::Function *f)
 				if (f->mangledName[i + lengthCount] == 'F') {
 					std::string className = f->mangledName.substr(i, lengthCount);
 
-					// I tried to access this from the named map, but I couldn't for the life of me figure out how to do it. C++ is terrible, in no other languages is stuff this annoying. I get it, it's because C++ is native code working with direct memory. But somehow C# compiles into native code and doesn't have these issues.
+					// I tried to access this from the named map, but I couldn't for the life of me figure out how to do it. C++ is terrible, no other languages have runtime libraries that silently fail like this. The map is empty even though the code that adds elements to the map is run. Good grief.
 					/*auto it = nameUTListPairs.find(className);
 					if (it != nameUTListPairs.end()) {
 						std::vector<Cpp::UserType*> vector = it->second;
