@@ -2,6 +2,7 @@
 
 #include "elf.h"
 
+#include <map>
 #include <iostream>
 #include <unordered_map>
 
@@ -290,6 +291,15 @@ public:
 		}
 	};
 
+	struct LineEntry
+	{
+		int lineNumber;
+		short charOffset;
+		int hexAddressOffset;
+	};
+
+	std::multimap<int, LineEntry> lineEntryMap;
+
 	Entry entries[500000]; // should be enough right? :p
 	int numEntries = 0;
 
@@ -315,6 +325,45 @@ public:
 
 		while (offset < m_sectionSize && !m_error)
 			offset = readEntry(offset);
+
+		// Read debug line data.
+		Elf32_Shdr* m_lineHeader;
+		m_lineHeader = m_elf->getSectionHeader(".line");
+		if (m_lineHeader)
+		{
+			char* m_lineSectionDataStart;
+			char* m_lineSectionData;
+			m_lineSectionDataStart = m_elf->getSectionData(m_lineHeader);
+			m_lineSectionData = m_lineSectionDataStart;
+
+			while (m_lineHeader->sh_size > (int)(m_lineSectionData - m_lineSectionDataStart)) {
+				int byteSize;
+				int funcPtr;
+				char* m_lineSectionDataChunkEnd;
+				m_lineSectionDataChunkEnd = m_lineSectionData;
+
+				byteSize = read<int>(m_lineSectionData);
+				m_lineSectionData += sizeof(int);
+				m_lineSectionDataChunkEnd += byteSize;
+
+				funcPtr = read<int>(m_lineSectionData);
+				m_lineSectionData += sizeof(int);
+
+				while (m_lineSectionDataChunkEnd > m_lineSectionData) {
+					LineEntry entry;
+
+					entry.lineNumber = read<int>(m_lineSectionData);
+					m_lineSectionData += sizeof(int);
+					entry.charOffset = read<short>(m_lineSectionData);
+					m_lineSectionData += sizeof(short);
+					entry.hexAddressOffset = read<int>(m_lineSectionData);
+					m_lineSectionData += sizeof(int);
+					lineEntryMap.insert(std::pair<int, LineEntry>(funcPtr, entry));
+					if (entry.lineNumber == 0)
+						break; // End.
+				}
+			}
+		}
 	}
 
 	Elf32_Off readEntry(Elf32_Off offset, Entry **outEntry = nullptr)

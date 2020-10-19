@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dwarf.h"
 #include <vector>
 #include <map>
 #include <string>
@@ -182,12 +183,14 @@ struct FunctionType
 
 struct Function : FunctionType
 {
+
 	bool isGlobal;
 	std::string name;
 	std::string mangledName;
 	unsigned int startAddress;
 	std::vector<Variable> variables;
 	UserType* typeOwner;
+	Dwarf* dwarf;
 
 	std::string toNameString();
 	std::string toNameString(bool skipNamespace);

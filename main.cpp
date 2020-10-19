@@ -270,6 +270,7 @@ bool processCompileUnit(Dwarf::Entry *entry, Cpp::File *cpp)
 		case DW_TAG_inlined_subroutine:
 		{
 			Cpp::Function f;
+			f.dwarf = entry->dwarf;
 
 			if (!processFunctionType(entry, &f))
 				return false;

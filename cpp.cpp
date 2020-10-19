@@ -282,7 +282,7 @@ std::string ClassType::toBodyString(bool includeOffsets)
 	if (functions.size() > 0) {
 		ss << "\n";
 		for (Function& fun : functions) {
-			ss << "\t" << fun.toDeclarationString() << ";\n";
+			ss << "\t" << fun.toDeclarationString() << "\n";
 		}
 	}
 
@@ -434,6 +434,28 @@ std::string Function::toDefinitionString()
 
 	for (Variable &v : variables)
 		ss << "\t" << v.toString() << ";\n";
+
+	// Save line numbers.
+	if (dwarf != nullptr) {
+		std::multimap<int, Dwarf::LineEntry>::iterator lines = dwarf->lineEntryMap.find(startAddress);
+		if (lines != dwarf->lineEntryMap.end()) {
+			std::pair<std::multimap<int, Dwarf::LineEntry>::iterator, std::multimap<int, Dwarf::LineEntry>::iterator> ret;
+			ret = dwarf->lineEntryMap.equal_range(startAddress);
+			for (std::multimap<int, Dwarf::LineEntry>::iterator it = ret.first; it != ret.second; ++it) {
+				ss << "\t// ";
+				if (it->second.lineNumber != 0) {
+					ss << "Line " << it->second.lineNumber;
+				}
+				else {
+					ss << "Func End";
+				}
+				
+				if (it->second.charOffset != (short)-1)
+					ss << ", Character " << it->second.charOffset;
+				ss << ", Address: " << toHexString(startAddress + it->second.hexAddressOffset) << ", Func Offset: " << toHexString(it->second.hexAddressOffset) << "\n";
+			}
+		}
+	}
 
 	ss << "}";
 
