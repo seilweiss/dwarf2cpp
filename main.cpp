@@ -41,6 +41,18 @@ bool processArrayType(Dwarf::Entry *entry, Cpp::ArrayType *a);
 bool processSubscriptData(Dwarf::Attribute *attr, Cpp::ArrayType *a);
 void replaceChar(char *str, char ch, char newCh);
 
+static inline std::string toHexString(int x)
+{
+	std::stringstream ss;
+	ss << std::hex << std::showbase << x;
+	return ss.str();
+}
+
+bool error(std::string errorMessage) {
+	std::cout << "ERROR: " << errorMessage << std::endl;
+	return false;
+}
+
 int main(int argc, char **argv)
 {
 	if (argc != 3)
@@ -56,20 +68,26 @@ int main(int argc, char **argv)
 
 	ElfFile *elf = new ElfFile(elfFilename);
 
-	if (elf->getError())
+	if (elf->getError()) {
+		std::cout << "Failed to parse " << elfFilename << " as an ELF file. Error Code: " << elf->getError() << std::endl;
 		return 1;
+	}
 
 	std::cout << "Loading DWARFv1 information..." << std::endl;
 
 	Dwarf *dwarf = new Dwarf(elf);
 
-	if (dwarf->getError())
+	if (dwarf->getError()) {
+		std::cout << "Failed to parse DWARF data. Error Code: " << dwarf->getError() << std::endl;
 		return 1;
+	}
 
 	std::cout << "Converting DWARFv1 entries to C++ data..." << std::endl;
 
-	if (!processDwarf(dwarf))
+	if (!processDwarf(dwarf)) {
+		std::cout << "Failed to process DWARF data." << std::endl;
 		return 1;
+	}
 
 	std::cout << "Done converting DWARFv1 data!" << std::endl;
 	std::cout << "\tNumber of C++ files: " << cppFiles.size() << std::endl << std::endl;
@@ -175,7 +193,7 @@ bool processDwarf(Dwarf *dwarf)
 			}
 
 			if (!processCompileUnit(entry, cpp))
-				return false;
+				return error(std::string("Failed to processCompileUnit for '").append(cpp->filename).append("'"));
 
 			if (!found)
 				cppFiles.push_back(cpp);
@@ -244,7 +262,7 @@ bool processCompileUnit(Dwarf::Entry *entry, Cpp::File *cpp)
 			Cpp::Variable var;
 
 			if (!processVariable(entry, &var))
-				return false;
+				return error("Failed to processVar.");
 
 			cpp->variables.push_back(var);
 			break;
@@ -273,10 +291,10 @@ bool processCompileUnit(Dwarf::Entry *entry, Cpp::File *cpp)
 			f.dwarf = entry->dwarf;
 
 			if (!processFunctionType(entry, &f))
-				return false;
+				return error("Failed to processFunctionType.");
 
 			if (!processFunction(entry, &f))
-				return false;
+				return error("Failed to processFunction.");
 
 			cpp->functions.push_back(f);
 		}
@@ -308,7 +326,7 @@ bool processVariable(Dwarf::Entry *entry, Cpp::Variable *var)
 		case DW_AT_mod_fund_type:
 		case DW_AT_mod_u_d_type:
 			if (!processTypeAttr(attr, &var->type))
-				return false;
+				return error(std::string("Failed to processTypeAttr for variable '").append(var->name).append("'."));
 			break;
 		}
 	}
@@ -333,7 +351,7 @@ bool processTypeAttr(Dwarf::Attribute *attr, Cpp::Type *type)
 		type->isFundamentalType = false;
 
 		if (!findUserType(dwarf, attr->getReference(), &type->userType))
-			return false;
+			return error(std::string("processTypeAttr failed when handling AT_user_def_type."));
 
 		break;
 	}
@@ -362,7 +380,7 @@ bool processTypeAttr(Dwarf::Attribute *attr, Cpp::Type *type)
 		char *end = mod + attr->size - sizeof(Elf32_Off);
 
 		if (!findUserType(dwarf, dwarf->read<Elf32_Off>(end), &type->userType))
-			return false;
+			return error(std::string("processTypeAttr failed when handling AT_mod_u_d_type."));
 
 		while (mod < end)
 		{
@@ -407,7 +425,7 @@ bool findUserType(Dwarf *dwarf, Elf32_Off ref, Cpp::UserType **u)
 	Dwarf::Entry *entry = dwarf->getEntryFromReference(ref);
 
 	if (!entry || entryUTPairs.count(entry) == 0)
-		return false;
+		return error(std::string("Failed to findUserType for reference '").append(std::to_string(ref)).append("'."));
 
 	*u = entryUTPairs[entry];
 
@@ -442,7 +460,7 @@ bool processUserType(Dwarf::Entry *entry, Cpp::UserType *userType)
 		userType->classData->parent = userType;
 
 		if (!processClassType(entry, userType->classData))
-			return false;
+			return error(std::string("Failed to processClassType for user type '").append(userType->name).append("'."));
 
 		break;
 	case DW_TAG_enumeration_type:
@@ -450,7 +468,7 @@ bool processUserType(Dwarf::Entry *entry, Cpp::UserType *userType)
 		userType->enumData = new Cpp::EnumType;
 
 		if (!processEnumType(entry, userType->enumData))
-			return false;
+			return error(std::string("Failed to processEnumType for user type '").append(userType->name).append("'."));
 
 		break;
 	case DW_TAG_array_type:
@@ -458,7 +476,7 @@ bool processUserType(Dwarf::Entry *entry, Cpp::UserType *userType)
 		userType->arrayData = new Cpp::ArrayType;
 
 		if (!processArrayType(entry, userType->arrayData))
-			return false;
+			return error(std::string("Failed to processArrayType for array type '").append(userType->name).append("'."));
 
 		break;
 	case DW_TAG_subroutine_type:
@@ -466,7 +484,7 @@ bool processUserType(Dwarf::Entry *entry, Cpp::UserType *userType)
 		userType->functionData = new Cpp::FunctionType;
 
 		if (!processFunctionType(entry, userType->functionData))
-			return false;
+			return error(std::string("Failed to processFunctionType for function type '").append(userType->name).append("'."));
 
 		break;
 	}
@@ -516,7 +534,7 @@ bool processClassType(Dwarf::Entry *entry, Cpp::ClassType *c)
 			Cpp::ClassType::Member m;
 
 			if (!processMember(entry, &m))
-				return false;
+				return error("Failed to processMember for class type.");
 
 			c->members.push_back(m);
 			break;
@@ -525,7 +543,7 @@ bool processClassType(Dwarf::Entry *entry, Cpp::ClassType *c)
 			Cpp::ClassType::Inheritance i;
 
 			if (!processInheritance(entry, &i))
-				return false;
+				return error("Failed to processInheritance for class type.");
 
 			c->inheritances.push_back(i);
 			break;
@@ -561,11 +579,11 @@ bool processMember(Dwarf::Entry *entry, Cpp::ClassType::Member *m)
 		case DW_AT_mod_fund_type:
 		case DW_AT_mod_u_d_type:
 			if (!processTypeAttr(attr, &m->type))
-				return false;
+				return error(std::string("Failed to processTypeAttr for member '").append(m->name).append("'."));
 			break;
 		case DW_AT_location:
 			if (!processLocationAttr(attr, &m->offset))
-				return false;
+				return error(std::string("Failed to processLocationAttr for member '").append(m->name).append("'."));
 		}
 	}
 
@@ -582,11 +600,11 @@ bool processInheritance(Dwarf::Entry *entry, Cpp::ClassType::Inheritance *i_)
 		{
 		case DW_AT_user_def_type:
 			if (!processTypeAttr(attr, &i_->type))
-				return false;
+				return error("Failed to processTypeAttr for inheritance.");
 			break;
 		case DW_AT_location:
 			if (!processLocationAttr(attr, &i_->offset))
-				return false;
+				return error("Failed to processLocationAttr for inheritance.");
 		}
 	}
 
@@ -619,14 +637,13 @@ bool processEnumType(Dwarf::Entry *entry, Cpp::EnumType *e)
 				e->baseType = Cpp::FundamentalType::LONG;
 				break;
 			default:
-				std::cout << "Unknown enum size! [" << byte_size << "]" << std::endl;
-				return false;
+				return error(std::string("Unknown enum base type size for enum type. (Size: ").append(std::to_string(byte_size)).append(")"));
 				break;
 			}
 			break;
 		case DW_AT_element_list:
 			if (!processElementList(attr, e, byte_size))
-				return false;
+				return error("Failed to processElementList for enum type.");
 			break;
 		}
 	}
@@ -699,7 +716,7 @@ bool processFunctionType(Dwarf::Entry *entry, Cpp::FunctionType *f)
 		case DW_AT_mod_fund_type:
 		case DW_AT_mod_u_d_type:
 			if (!processTypeAttr(attr, &f->returnType))
-				return false;
+				return error("Failed to processTypeAttr for function return type.");
 			break;
 		}
 	}
@@ -714,7 +731,7 @@ bool processFunctionType(Dwarf::Entry *entry, Cpp::FunctionType *f)
 			Cpp::FunctionType::Parameter p;
 
 			if (!processParameter(entry, &p))
-				return false;
+				return error("Failed to processParameter for function parameter.");
 
 			f->parameters.push_back(p);
 		}
@@ -741,7 +758,7 @@ bool processParameter(Dwarf::Entry *entry, Cpp::FunctionType::Parameter *p)
 		case DW_AT_mod_fund_type:
 		case DW_AT_mod_u_d_type:
 			if (!processTypeAttr(attr, &p->type))
-				return false;
+				return error(std::string("Failed to processTypeAttr for parameter '").append(p->name).append("'."));
 			break;
 		}
 	}
@@ -781,7 +798,7 @@ bool processFunction(Dwarf::Entry *entry, Cpp::Function *f)
 		{
 		case DW_TAG_lexical_block:
 			if (!processLexicalBlock(entry, f))
-				return false;
+				return error(std::string("Failed to processLexicalBlock for function '").append(f->name).append("'."));
 		}
 
 		entry = entry->getSibling();
@@ -866,7 +883,7 @@ bool processLexicalBlock(Dwarf::Entry *entry, Cpp::Function *f)
 			Cpp::Variable v;
 			
 			if (!processVariable(entry, &v))
-				return false;
+				return error(std::string("Failed to processVariable for local var lexical block in function '").append(f->name).append("'."));
 
 			f->variables.push_back(v);
 			break;
@@ -889,11 +906,11 @@ bool processArrayType(Dwarf::Entry *entry, Cpp::ArrayType *a)
 		{
 		case DW_AT_ordering:
 			if (attr->getHword() != DW_ORD_row_major) // meh
-				return false;
+				return error(std::string("processArrayType encountered ordering unsupported by dwarf2cpp! (").append(toHexString(attr->getHword())).append(")"));
 			break;
 		case DW_AT_subscr_data:
 			if (!processSubscriptData(attr, a))
-				return false;
+				return error("Failed to processSubscriptData.");
 		}
 	}
 
@@ -921,7 +938,7 @@ bool processSubscriptData(Dwarf::Attribute *attr, Cpp::ArrayType *a)
 			block = dwarf->offsetToPointer(offset);
 
 			if (!processTypeAttr(typeAttr, &a->type))
-				return false;
+				return error("Failed to processTypeAttr for subscript data DW_FMT_ET.");
 
 			break;
 		}
@@ -932,14 +949,14 @@ bool processSubscriptData(Dwarf::Attribute *attr, Cpp::ArrayType *a)
 
 			// Only long indices are supported
 			if (fundType != DW_FT_long)
-				return false;
+				return error(std::string("Subscript data DW_FMT_FT_C_C had unsupported fundamental indice type ").append(toHexString(fundType)).append(" in type '").append(a->toNameString("")).append("'."));
 
 			Elf32_Word lowBound = dwarf->read<Elf32_Word>(block);
 			block += sizeof(Elf32_Word);
 
 			// Only indices starting at 0 are supported
 			if (lowBound != 0)
-				return false;
+				return error(std::string("Subscript data contained indices which did not start at zero! (Start at: '").append(toHexString(lowBound)).append("', Type: '").append(a->toNameString("")).append("')"));
 
 			Elf32_Word highBound = dwarf->read<Elf32_Word>(block);
 			block += sizeof(Elf32_Word);
@@ -953,7 +970,7 @@ bool processSubscriptData(Dwarf::Attribute *attr, Cpp::ArrayType *a)
 		{
 			// Only fundamental typed (long) indices and
 			// constant value bounds are supported
-			return false;
+			return error(std::string("Encountered subscript data format unsupported by dwarf2cpp! (").append(toHexString(format)).append(")"));
 		}
 	}
 
