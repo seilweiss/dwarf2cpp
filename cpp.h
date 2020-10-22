@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dwarf.h"
 #include <vector>
 #include <map>
 #include <string>
@@ -70,6 +71,8 @@ struct Type
 		UserType *userType;
 	};
 
+	int size();
+	std::string toString(std::string varName);
 	std::string toString();
 	static std::string ModifierToString(Modifier m);
 };
@@ -85,7 +88,7 @@ struct Variable
 
 struct UserType
 {
-	enum { CLASS, ENUM, ARRAY, FUNCTION } type;
+	enum { CLASS, UNION, STRUCT, ENUM, ARRAY, FUNCTION } type;
 	std::string name;
 	int index;
 
@@ -109,6 +112,8 @@ struct ClassType
 		int offset;
 		std::string name;
 		Type type;
+		int bit_offset;
+		int bit_size;
 
 		std::string toString(bool includeOffset);
 	};
@@ -119,9 +124,11 @@ struct ClassType
 		Type type;
 	};
 
+	UserType* parent;
 	int size;
 	std::vector<Member> members;
 	std::vector<Inheritance> inheritances;
+	std::vector<Function> functions;
 
 	std::string toNameString(std::string name, bool includeSize, bool includeInheritances);
 	std::string toBodyString(bool includeOffsets);
@@ -133,11 +140,12 @@ struct EnumType
 	struct Element
 	{
 		std::string name;
-		int constValue;
+		long constValue;
 
 		std::string toString(int lastValue);
 	};
 
+	FundamentalType baseType;
 	std::vector<Element> elements;
 
 	std::string toNameString(std::string name);
@@ -176,18 +184,23 @@ struct FunctionType
 
 struct Function : FunctionType
 {
+
 	bool isGlobal;
 	std::string name;
 	std::string mangledName;
 	unsigned int startAddress;
 	std::vector<Variable> variables;
+	UserType* typeOwner;
+	Dwarf* dwarf;
 
 	std::string toNameString();
+	std::string toNameString(bool skipNamespace);
 	std::string toDeclarationString();
 	std::string toDefinitionString();
 };
 
 std::string FundamentalTypeToString(FundamentalType ft);
+int GetFundamentalTypeSize(FundamentalType ft);
 std::string CommentToString(std::string comment);
 std::string StarCommentToString(std::string comment, bool multiline);
 std::string IndentToString(int level);

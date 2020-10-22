@@ -17,6 +17,8 @@ std::string File::toString(bool justUserTypes, bool includeComments)
 	for (UserType *ut : userTypes)
 	{
 		if (ut->type == UserType::CLASS ||
+			ut->type == UserType::UNION ||
+			ut->type == UserType::STRUCT || 
 			ut->type == UserType::ENUM)
 			ss << ut->toDeclarationString() << "\n";
 	}
@@ -45,6 +47,8 @@ std::string File::toString(bool justUserTypes, bool includeComments)
 	for (UserType *ut : userTypes)
 	{
 		if (ut->type == UserType::CLASS ||
+			ut->type == UserType::UNION ||
+			ut->type == UserType::STRUCT ||
 			ut->type == UserType::ENUM)
 		{
 			ss << ut->toDefinitionString(includeComments) << "\n\n";
@@ -88,73 +92,45 @@ std::string File::toString(bool justUserTypes, bool includeComments)
 	return ss.str();
 }
 
-std::string Type::toString()
-{
-	std::string name = (isFundamentalType ?
-		FundamentalTypeToString(fundamentalType) :
-		userType->name);
+std::string Type::toString(std::string varName) {
+	std::stringstream result;
 
-	std::vector<std::string> ptrref;
-	std::vector<std::string> prefix;
-	std::vector<std::string> postfix;
-
-	bool isFuncPointer = (isFundamentalType) ? false :
-		(userType->type == UserType::FUNCTION);
-
-	bool firstPointerFound = false;
-
+	// Add prefix modifiers.
 	for (Modifier mod : modifiers)
-	{
-		std::string modstr = ModifierToString(mod);
+		if (mod == Modifier::CONST || mod == Modifier::VOLATILE)
+			result << ModifierToString(mod) << " ";
 
-		if (mod == CONST && mod == VOLATILE)
-		{
-			if (prefix.size() == 0)
-				prefix.push_back(modstr);
-			else
-				postfix.push_back(modstr);
-		}
-		else
-		{
-			// Kind of a hack to make function pointers print correctly.
-			// In the real world, a function pointer is typically defined as a pointer
-			// in the typedef itself, and not in a variable/member type...
-			// So this ignores the first pointer from the modifiers.
-			// See FunctionType::toNameString()... it prints the function type as a pointer
-			// even though it really isn't.
-
-			if (isFuncPointer && !firstPointerFound)
-				firstPointerFound = true;
-			else
-				ptrref.push_back(modstr);
-		}
+	if (isFundamentalType) {
+		result << FundamentalTypeToString(fundamentalType);
+	} else if (userType->type == UserType::ARRAY) {
+		return userType->arrayData->toNameString(varName);
+	}
+	else if (userType->type == UserType::FUNCTION) {
+		return userType->functionData->toNameString(varName);
+	}
+	else {
+		result << userType->name;
 	}
 
-	std::stringstream ss;
+	for (Modifier mod : modifiers)
+		if (mod == Modifier::POINTER_TO || mod == Modifier::REFERENCE_TO)
+			result << ModifierToString(mod);
 
-	for (std::string s : prefix)
-		ss << s << " ";
+	if (!varName.empty())
+		result << " " << varName;
 
-	ss << name;
+	return result.str();
+}
 
-	for (std::string s : ptrref)
-		ss << s;
-
-	ss << " ";
-
-	for (std::string s : postfix)
-		ss << s << " ";
-
-	std::string str = ss.str();
-	str.pop_back();
-
-	return str;
+std::string Type::toString()
+{
+	return toString("");
 }
 
 std::string Variable::toString()
 {
 	std::stringstream ss;
-	ss << type.toString() << " " << name;
+	ss << type.toString(name);
 	return ss.str();
 }
 
@@ -172,6 +148,8 @@ std::string UserType::toDefinitionString(bool includeComments)
 
 	switch (type)
 	{
+	case UNION:
+	case STRUCT:
 	case CLASS:
 		ss << classData->toBodyString(includeComments);
 		break;
@@ -189,6 +167,8 @@ std::string UserType::toNameString(bool includeSize, bool includeInheritances)
 {
 	switch (type)
 	{
+	case UNION:
+	case STRUCT:
 	case CLASS:
 		return classData->toNameString(name, includeSize, includeInheritances);
 	case ENUM:
@@ -205,7 +185,7 @@ std::string UserType::toNameString(bool includeSize, bool includeInheritances)
 std::string ClassType::toNameString(std::string name, bool includeSize, bool includeInheritances)
 {
 	std::stringstream ss;
-	ss << (isUnion() ? "union " : "struct ") << name;
+	ss << std::string((parent->type == UserType::STRUCT) ? "struct " : ((parent->type == UserType::UNION) ? "union " : "class ")) << name;
 
 	if (includeInheritances)
 	{
@@ -231,7 +211,7 @@ std::string ClassType::toBodyString(bool includeOffsets)
 	std::stringstream ss;
 	ss << "{\n";
 
-	bool includeUnions = !isUnion();
+	bool includeUnions = (parent->type != UserType::UNION);
 	int unionOffset = -1;
 
 	size_t size = members.size();
@@ -247,7 +227,15 @@ std::string ClassType::toBodyString(bool includeOffsets)
 			i < size - 1 && members[i + 1].offset == offset)
 		{
 			unionOffset = offset;
-			ss << "union\n\t{\n\t";
+
+			if (m.bit_size == -1) {
+				ss << "union";
+			}
+			else {
+				ss << "struct";
+			}
+
+			ss << "\n\t{\n\t";
 		}
 
 		if (includeUnions && unionOffset != -1)
@@ -263,23 +251,16 @@ std::string ClassType::toBodyString(bool includeOffsets)
 		}
 	}
 
+	if (functions.size() > 0) {
+		ss << "\n";
+		for (Function& fun : functions) {
+			ss << "\t" << fun.toDeclarationString() << "\n";
+		}
+	}
+
 	ss << "}";
 
 	return ss.str();
-}
-
-bool ClassType::isUnion()
-{
-	if (members.size() <= 1)
-		return false;
-
-	for (size_t i = 0; i < members.size() - 1; i++)
-	{
-		if (members[i].offset != members[i+1].offset)
-			return false;
-	}
-
-	return true;
 }
 
 std::string ClassType::Member::toString(bool includeOffset)
@@ -289,7 +270,9 @@ std::string ClassType::Member::toString(bool includeOffset)
 	if (includeOffset)
 		ss << StarCommentToString(toHexString(offset), false) << " ";
 
-	ss << type.toString() << " " << name;
+	ss << type.toString(name);
+	if (bit_size != -1)
+		ss << " : " << bit_size;
 
 	return ss.str();
 }
@@ -298,12 +281,15 @@ std::string EnumType::toNameString(std::string name)
 {
 	std::stringstream ss;
 	ss << "enum " << name;
+	if (baseType != Cpp::FundamentalType::INT)
+		ss << " : " << FundamentalTypeToString(baseType);
 	return ss.str();
 }
 
 std::string EnumType::toBodyString()
 {
 	std::stringstream ss;
+
 	ss << "{\n";
 
 	int lastValue = -1;
@@ -340,7 +326,7 @@ std::string EnumType::Element::toString(int lastValue)
 std::string ArrayType::toNameString(std::string name)
 {
 	std::stringstream ss;
-	ss << type.toString() << " " << name;
+	ss << type.toString(name);
 
 	for (Dimension &d : dimensions)
 		ss << "[" << std::to_string(d.size) << "]";
@@ -380,26 +366,28 @@ std::string FunctionType::toParametersString()
 
 std::string FunctionType::Parameter::toString()
 {
+	return type.toString(name);
+}
+
+std::string Function::toNameString(bool skipNamespace)
+{
 	std::stringstream ss;
-	ss << type.toString();
-
-	if (!name.empty())
-		ss << " " << name;
-
+	ss << returnType.toString() << " ";
+	if (typeOwner != nullptr && !skipNamespace)
+		ss << typeOwner->name << "::";
+	ss << name << toParametersString();
 	return ss.str();
 }
 
 std::string Function::toNameString()
 {
-	std::stringstream ss;
-	ss << returnType.toString() << " " << name << toParametersString();
-	return ss.str();
+	return toNameString(false);
 }
 
 std::string Function::toDeclarationString()
 {
 	std::stringstream ss;
-	ss << toNameString() << ";";
+	ss << toNameString(true) << ";";
 	return ss.str();
 }
 
@@ -412,6 +400,28 @@ std::string Function::toDefinitionString()
 
 	for (Variable &v : variables)
 		ss << "\t" << v.toString() << ";\n";
+
+	// Save line numbers.
+	if (dwarf != nullptr) {
+		std::multimap<int, Dwarf::LineEntry>::iterator lines = dwarf->lineEntryMap.find(startAddress);
+		if (lines != dwarf->lineEntryMap.end()) {
+			std::pair<std::multimap<int, Dwarf::LineEntry>::iterator, std::multimap<int, Dwarf::LineEntry>::iterator> ret;
+			ret = dwarf->lineEntryMap.equal_range(startAddress);
+			for (std::multimap<int, Dwarf::LineEntry>::iterator it = ret.first; it != ret.second; ++it) {
+				ss << "\t// ";
+				if (it->second.lineNumber != 0) {
+					ss << "Line " << it->second.lineNumber;
+				}
+				else {
+					ss << "Func End";
+				}
+				
+				if (it->second.charOffset != (short)-1)
+					ss << ", Character " << it->second.charOffset;
+				ss << ", Address: " << toHexString(startAddress + it->second.hexAddressOffset) << ", Func Offset: " << toHexString(it->second.hexAddressOffset) << "\n";
+			}
+		}
+	}
 
 	ss << "}";
 
@@ -460,8 +470,81 @@ std::string FundamentalTypeToString(FundamentalType ft)
 	}
 
 	std::stringstream ss;
-	ss << "<unknown type (" << toHexString(ft) << ")>";
+	ss << "<unknown fundamental type (" << toHexString(ft) << ")>";
 	return ss.str();
+}
+
+int GetFundamentalTypeSize(FundamentalType ft)
+{
+	switch (ft)
+	{
+	case FundamentalType::CHAR:
+	case FundamentalType::SIGNED_CHAR:
+	case FundamentalType::UNSIGNED_CHAR:
+		return 1;
+	case FundamentalType::SHORT:
+	case FundamentalType::SIGNED_SHORT:
+	case FundamentalType::UNSIGNED_SHORT:
+		return 2;
+	case FundamentalType::INT:
+	case FundamentalType::SIGNED_INT:
+	case FundamentalType::UNSIGNED_INT:
+		return 4;
+	case FundamentalType::LONG:
+	case FundamentalType::SIGNED_LONG:
+	case FundamentalType::UNSIGNED_LONG:
+		return 8; // Confirmed 8 bytes.
+	case FundamentalType::FLOAT:
+		return 4;
+	case FundamentalType::DOUBLE:
+		return 8;
+	case FundamentalType::LONG_DOUBLE:
+		return 8; // TODO: UNSURE
+	case FundamentalType::VOID:
+		return 4; // TODO: UNSURE
+	case FundamentalType::BOOL:
+		return 1; // TODO: UNSURE
+	case FundamentalType::LONG_LONG:
+	case FundamentalType::SIGNED_LONG_LONG:
+	case FundamentalType::UNSIGNED_LONG_LONG:
+		return 8; // TODO: UNSURE
+	}
+
+	return -1;
+}
+
+int Type::size() {
+	if (modifiers.size() > 0)
+		for (Cpp::Type::Modifier modifier : modifiers)
+			if (modifier == Cpp::Type::Modifier::POINTER_TO || modifier == Cpp::Type::Modifier::REFERENCE_TO)
+				return 4;
+
+	if (isFundamentalType) {
+		return GetFundamentalTypeSize(fundamentalType);
+	}
+	else {
+		switch (userType->type) {
+		case Cpp::UserType::STRUCT:
+		case Cpp::UserType::CLASS:
+		case Cpp::UserType::UNION:
+			return userType->classData->size;
+			break;
+		case Cpp::UserType::ARRAY:
+			int amount;
+			amount = 1;
+			if (userType->arrayData->dimensions.size() > 0)
+				for (auto dimension : userType->arrayData->dimensions)
+					amount *= dimension.size;
+			return amount * userType->arrayData->type.size();
+			break;
+		case Cpp::UserType::FUNCTION:
+			return 4;
+			break;
+		case Cpp::UserType::ENUM:
+			return GetFundamentalTypeSize(userType->enumData->baseType);
+			break;
+		}
+	}
 }
 
 std::string Type::ModifierToString(Modifier m)

@@ -44,3 +44,7 @@ dwarf2cpp <input ELF file> <output directory>
 
 ## Customization
 You can edit [cpp.h](cpp.h) and [cpp.cpp](cpp.cpp) to customize how the C/C++ output is generated. Currently, there are no customization options that can be passed as command line arguments to this tool.
+
+## DWARFv1 Documentation
+Useful References:  
+ - http://www.dwarfstd.org/doc/dwarf_1_1_0.pdf
