@@ -124,7 +124,9 @@ Cpp::File* findCppFile(Dwarf::Entry *entry, const char **outFilename)
 {
 	*outFilename = nullptr;
 
-	for (int i = 0; i < entry->numAttributes; i++)
+	size_t numAttributes = entry->attributes.size();
+
+	for (size_t i = 0; i < numAttributes; i++)
 	{
 		Dwarf::Attribute *attr = &entry->attributes[i];
 
@@ -172,10 +174,9 @@ void fixUserTypeNames()
 
 bool processDwarf(Dwarf *dwarf)
 {
-	Dwarf::Entry *entry = dwarf->entries;
-	Dwarf::Entry *end = dwarf->entries + dwarf->numEntries;
+	Dwarf::Entry *entry = &dwarf->entries.front();
 
-	while (entry && entry < end)
+	while (entry)
 	{
 		switch (entry->tag)
 		{
@@ -217,8 +218,9 @@ bool processCompileUnit(Dwarf::Entry *entry, Cpp::File *cpp)
 	nameUTListPairs.clear();
 
 	Dwarf::Entry *next = entry->getSibling();
+	size_t numAttributes = entry->attributes.size();
 
-	for (int i = 0; i < entry->numAttributes; i++)
+	for (size_t i = 0; i < numAttributes; i++)
 	{
 		Dwarf::Attribute *attr = &entry->attributes[i];
 
@@ -312,7 +314,9 @@ bool processVariable(Dwarf::Entry *entry, Cpp::Variable *var)
 {
 	var->isGlobal = (entry->tag == DW_TAG_global_variable);
 
-	for (int i = 0; i < entry->numAttributes; i++)
+	size_t numAttributes = entry->attributes.size();
+
+	for (size_t i = 0; i < numAttributes; i++)
 	{
 		Dwarf::Attribute *attr = &entry->attributes[i];
 
@@ -336,7 +340,7 @@ bool processVariable(Dwarf::Entry *entry, Cpp::Variable *var)
 
 bool processTypeAttr(Dwarf::Attribute *attr, Cpp::Type *type)
 {
-	Dwarf *dwarf = attr->entry->dwarf;
+	Dwarf *dwarf = attr->dwarf;
 
 	switch (attr->name)
 	{
@@ -400,7 +404,7 @@ bool processLocationAttr(Dwarf::Attribute *attr, int *location)
 	// I don't really know how location is supposed to be handled,
 	// so I just look for a DW_OP_CONST and use that as the "location"
 
-	Dwarf *dwarf = attr->entry->dwarf;
+	Dwarf *dwarf = attr->dwarf;
 
 	char *block = attr->getBlock();
 	char *end = block + attr->size;
@@ -434,7 +438,9 @@ bool findUserType(Dwarf *dwarf, Elf32_Off ref, Cpp::UserType **u)
 
 bool processUserType(Dwarf::Entry *entry, Cpp::UserType *userType)
 {
-	for (int i = 0; i < entry->numAttributes; i++)
+	size_t numAttributes = entry->attributes.size();
+
+	for (size_t i = 0; i < numAttributes; i++)
 	{
 		Dwarf::Attribute *attr = &entry->attributes[i];
 
@@ -496,7 +502,9 @@ bool processClassType(Dwarf::Entry *entry, Cpp::ClassType *c)
 {
 	c->size = 0;
 
-	for (int i = 0; i < entry->numAttributes; i++)
+	size_t numAttributes = entry->attributes.size();
+
+	for (size_t i = 0; i < numAttributes; i++)
 	{
 		Dwarf::Attribute *attr = &entry->attributes[i];
 
@@ -559,7 +567,10 @@ bool processMember(Dwarf::Entry *entry, Cpp::ClassType::Member *m)
 {
 	m->bit_offset = -1;
 	m->bit_size = -1;
-	for (int i = 0; i < entry->numAttributes; i++)
+
+	size_t numAttributes = entry->attributes.size();
+
+	for (size_t i = 0; i < numAttributes; i++)
 	{
 		Dwarf::Attribute *attr = &entry->attributes[i];
 
@@ -592,7 +603,9 @@ bool processMember(Dwarf::Entry *entry, Cpp::ClassType::Member *m)
 
 bool processInheritance(Dwarf::Entry *entry, Cpp::ClassType::Inheritance *i_)
 {
-	for (int i = 0; i < entry->numAttributes; i++)
+	size_t numAttributes = entry->attributes.size();
+
+	for (size_t i = 0; i < numAttributes; i++)
 	{
 		Dwarf::Attribute *attr = &entry->attributes[i];
 
@@ -614,7 +627,9 @@ bool processInheritance(Dwarf::Entry *entry, Cpp::ClassType::Inheritance *i_)
 bool processEnumType(Dwarf::Entry *entry, Cpp::EnumType *e)
 {
 	int byte_size = 0;
-	for (int i = 0; i < entry->numAttributes; i++)
+	size_t numAttributes = entry->attributes.size();
+
+	for (size_t i = 0; i < numAttributes; i++)
 	{
 		Dwarf::Attribute *attr = &entry->attributes[i];
 
@@ -653,7 +668,7 @@ bool processEnumType(Dwarf::Entry *entry, Cpp::EnumType *e)
 
 bool processElementList(Dwarf::Attribute *attr, Cpp::EnumType *e, int byte_size)
 {
-	Dwarf *dwarf = attr->entry->dwarf;
+	Dwarf *dwarf = attr->dwarf;
 
 	char *block = attr->getBlock();
 	char *end = block + attr->size;
@@ -705,7 +720,9 @@ bool processFunctionType(Dwarf::Entry *entry, Cpp::FunctionType *f)
 	f->parameters.reserve(paramCount);
 	entry = first;
 
-	for (int i = 0; i < entry->numAttributes; i++)
+	size_t numAttributes = entry->attributes.size();
+
+	for (size_t i = 0; i < numAttributes; i++)
 	{
 		Dwarf::Attribute *attr = &entry->attributes[i];
 
@@ -744,7 +761,9 @@ bool processFunctionType(Dwarf::Entry *entry, Cpp::FunctionType *f)
 
 bool processParameter(Dwarf::Entry *entry, Cpp::FunctionType::Parameter *p)
 {
-	for (int i = 0; i < entry->numAttributes; i++)
+	size_t numAttributes = entry->attributes.size();
+
+	for (size_t i = 0; i < numAttributes; i++)
 	{
 		Dwarf::Attribute *attr = &entry->attributes[i];
 
@@ -770,7 +789,9 @@ bool processFunction(Dwarf::Entry *entry, Cpp::Function *f)
 {
 	f->isGlobal = (entry->tag == DW_TAG_global_subroutine);
 
-	for (int i = 0; i < entry->numAttributes; i++)
+	size_t numAttributes = entry->attributes.size();
+
+	for (size_t i = 0; i < numAttributes; i++)
 	{
 		Dwarf::Attribute *attr = &entry->attributes[i];
 
@@ -898,7 +919,9 @@ bool processLexicalBlock(Dwarf::Entry *entry, Cpp::Function *f)
 
 bool processArrayType(Dwarf::Entry *entry, Cpp::ArrayType *a)
 {
-	for (int i = 0; i < entry->numAttributes; i++)
+	size_t numAttributes = entry->attributes.size();
+
+	for (size_t i = 0; i < numAttributes; i++)
 	{
 		Dwarf::Attribute *attr = &entry->attributes[i];
 
@@ -919,7 +942,7 @@ bool processArrayType(Dwarf::Entry *entry, Cpp::ArrayType *a)
 
 bool processSubscriptData(Dwarf::Attribute *attr, Cpp::ArrayType *a)
 {
-	Dwarf *dwarf = attr->entry->dwarf;
+	Dwarf *dwarf = attr->dwarf;
 
 	char *block = attr->getBlock();
 	char *end = block + attr->size;
@@ -931,11 +954,15 @@ bool processSubscriptData(Dwarf::Attribute *attr, Cpp::ArrayType *a)
 
 		if (format == DW_FMT_ET)
 		{
+			int typeAttrIndex;
 			Dwarf::Attribute *typeAttr;
+			Dwarf::Entry* entry = &dwarf->entries[attr->entryIndex];
 			Elf32_Off offset = dwarf->pointerToOffset(block);
 
-			offset = dwarf->readAttribute(offset, attr->entry, &typeAttr);
+			offset = dwarf->readAttribute(offset, entry, &typeAttrIndex);
 			block = dwarf->offsetToPointer(offset);
+
+			typeAttr = &entry->attributes[typeAttrIndex];
 
 			if (!processTypeAttr(typeAttr, &a->type))
 				return error("Failed to processTypeAttr for subscript data DW_FMT_ET.");

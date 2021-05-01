@@ -204,7 +204,8 @@ public:
 
 	struct Attribute
 	{
-		Entry *entry;
+		Dwarf* dwarf;
+		int entryIndex;
 		Elf32_Off offset;
 		Elf32_Half name;
 		Elf32_Word size;
@@ -217,12 +218,12 @@ public:
 
 		inline Elf32_Addr getAddress()
 		{
-			return entry->dwarf->read<Elf32_Addr>(value);
+			return dwarf->read<Elf32_Addr>(value);
 		}
 
 		inline Elf32_Off getReference()
 		{
-			return entry->dwarf->read<Elf32_Off>(value);
+			return dwarf->read<Elf32_Off>(value);
 		}
 
 		inline char* getBlock()
@@ -232,17 +233,17 @@ public:
 
 		inline Elf32_Half getHword()
 		{
-			return entry->dwarf->read<Elf32_Half>(value);
+			return dwarf->read<Elf32_Half>(value);
 		}
 
 		inline Elf32_Word getWord()
 		{
-			return entry->dwarf->read<Elf32_Word>(value);
+			return dwarf->read<Elf32_Word>(value);
 		}
 
 		inline uint64_t getDword()
 		{
-			return entry->dwarf->read<uint64_t>(value);
+			return dwarf->read<uint64_t>(value);
 		}
 
 		inline char* getString()
@@ -258,8 +259,7 @@ public:
 		int index;
 		Elf32_Word length;
 		Elf32_Half tag;
-		Attribute attributes[32];
-		int numAttributes = 0;
+		std::vector<Attribute> attributes;
 
 		inline bool isNullEntry()
 		{
@@ -268,10 +268,12 @@ public:
 
 		inline Entry* getSibling()
 		{
-			if (index == dwarf->numEntries - 1)
+			if (index == dwarf->entries.size() - 1)
 				return nullptr;
 
-			for (int i = 0; i < numAttributes; i++)
+			size_t numAttributes = attributes.size();
+
+			for (size_t i = 0; i < numAttributes; i++)
 			{
 				Attribute *attr = &attributes[i];
 
@@ -299,9 +301,7 @@ public:
 	};
 
 	std::multimap<int, LineEntry> lineEntryMap;
-
-	Entry entries[500000]; // should be enough right? :p
-	int numEntries = 0;
+	std::vector<Entry> entries;
 
 	Dwarf(ElfFile *elf)
 	{
@@ -320,8 +320,6 @@ public:
 		m_sectionSize = m_section->sh_size;
 
 		Elf32_Off offset = 0;
-
-		m_entryRefMap.reserve(500000);
 
 		while (offset < m_sectionSize && !m_error)
 			offset = readEntry(offset);
@@ -366,31 +364,30 @@ public:
 		}
 	}
 
-	Elf32_Off readEntry(Elf32_Off offset, Entry **outEntry = nullptr)
+	Elf32_Off readEntry(Elf32_Off offset, int *outIndex = nullptr)
 	{
-		int index = numEntries++;
+		Entry entry;
 
-		Entry *entry = &entries[index];
-		entry->dwarf = this;
-		entry->index = index;
-		entry->offset = offset;
-		entry->length = read<Elf32_Word>(m_sectionData + offset);
+		entry.dwarf = this;
+		entry.index = entries.size();
+		entry.offset = offset;
+		entry.length = read<Elf32_Word>(m_sectionData + offset);
 
-		m_entryRefMap[offset] = entry;
+		m_entryIndexRefMap[offset] = entry.index;
 
-		Elf32_Word end = offset + entry->length;
+		Elf32_Word end = offset + entry.length;
 
-		if (entry->isNullEntry()) // Null entry
+		if (entry.isNullEntry()) // Null entry
 			offset = end;
 		else
 		{
 			offset += sizeof(Elf32_Word);
 
-			entry->tag = read<Elf32_Half>(m_sectionData + offset);
+			entry.tag = read<Elf32_Half>(m_sectionData + offset);
 			offset += sizeof(Elf32_Half);
 
 			while (offset < end && !m_error)
-				offset = readAttribute(offset, entry);
+				offset = readAttribute(offset, &entry);
 
 			if (offset > end)
 			{
@@ -399,62 +396,69 @@ public:
 			}
 		}
 
-		if (outEntry)
-			*outEntry = entry;
+		entries.push_back(entry);
+
+		if (outIndex)
+			*outIndex = entry.index;
 
 		return offset;
 	}
 
-	Elf32_Off readAttribute(Elf32_Off offset, Entry *entry, Attribute **outAttr = nullptr)
+	Elf32_Off readAttribute(Elf32_Off offset, Entry *entry, int *outIndex = nullptr)
 	{
-		Attribute *attribute = &entry->attributes[entry->numAttributes++];
+		Attribute attribute;
 
-		attribute->entry = entry;
-		attribute->offset = offset;
-		attribute->name = read<Elf32_Half>(m_sectionData + offset);
+		attribute.dwarf = entry->dwarf;
+		attribute.entryIndex = entry->index;
+		attribute.offset = offset;
+		attribute.name = read<Elf32_Half>(m_sectionData + offset);
 		offset += sizeof(Elf32_Half);
 
-		Elf32_Half form = attribute->getForm();
+		Elf32_Half form = attribute.getForm();
 
 		switch (form)
 		{
 		case DW_FORM_ADDR:
-			attribute->size = sizeof(Elf32_Addr);
+			attribute.size = sizeof(Elf32_Addr);
 			break;
 		case DW_FORM_REF:
-			attribute->size = sizeof(Elf32_Off);
+			attribute.size = sizeof(Elf32_Off);
 			break;
 		case DW_FORM_BLOCK2:
-			attribute->size = read<Elf32_Half>(m_sectionData + offset);
+			attribute.size = read<Elf32_Half>(m_sectionData + offset);
 			offset += sizeof(Elf32_Half);
 			break;
 		case DW_FORM_BLOCK4:
-			attribute->size = read<Elf32_Word>(m_sectionData + offset);
+			attribute.size = read<Elf32_Word>(m_sectionData + offset);
 			offset += sizeof(Elf32_Word);
 			break;
 		case DW_FORM_DATA2:
-			attribute->size = sizeof(Elf32_Half);
+			attribute.size = sizeof(Elf32_Half);
 			break;
 		case DW_FORM_DATA4:
-			attribute->size = sizeof(Elf32_Word);
+			attribute.size = sizeof(Elf32_Word);
 			break;
 		case DW_FORM_DATA8:
-			attribute->size = sizeof(uint64_t);
+			attribute.size = sizeof(uint64_t);
 			break;
 		case DW_FORM_STRING:
-			attribute->size = strlen(m_sectionData + offset) + 1;
+			attribute.size = strlen(m_sectionData + offset) + 1;
 			break;
 		default:
 			m_error = ERR_INVALID_ATTRIBUTE;
 			return 0;
 		}
 
-		attribute->value = m_sectionData + offset;
-		
-		if (outAttr)
-			*outAttr = attribute;
+		attribute.value = m_sectionData + offset;
 
-		return offset + attribute->size;
+		int index = entry->attributes.size();
+
+		entry->attributes.push_back(attribute);
+		
+		if (outIndex)
+			*outIndex = index;
+
+		return offset + attribute.size;
 	}
 
 	inline Error getError()
@@ -464,10 +468,10 @@ public:
 
 	inline Entry* getEntryFromReference(Elf32_Off ref)
 	{
-		if (m_entryRefMap.count(ref) == 0)
+		if (m_entryIndexRefMap.count(ref) == 0)
 			return nullptr;
 
-		return m_entryRefMap[ref];
+		return &entries[m_entryIndexRefMap[ref]];
 	}
 
 	inline Elf32_Off pointerToOffset(char *ptr)
@@ -494,5 +498,5 @@ private:
 	char *m_sectionData;
 	Elf32_Word m_sectionSize;
 
-	std::unordered_map<Elf32_Off, Entry*> m_entryRefMap;
+	std::unordered_map<Elf32_Off, int> m_entryIndexRefMap;
 };
