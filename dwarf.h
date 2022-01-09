@@ -3,6 +3,7 @@
 #include "elf.h"
 
 #include <map>
+#include <vector>
 #include <iostream>
 #include <unordered_map>
 
