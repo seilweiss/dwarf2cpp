@@ -832,7 +832,7 @@ bool processFunction(Dwarf::Entry *entry, Cpp::Function *f)
 		f->typeOwner->classData->functions.push_back(*f);
 	}
 	else if (f->mangledName.size() > 2) {
-		int foundAt = f->mangledName.find_last_of("__");
+		int foundAt = f->mangledName.rfind("__");
 		if (foundAt != -1) {
 			char temp;
 			std::stringstream length;
